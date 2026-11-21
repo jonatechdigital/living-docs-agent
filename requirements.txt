@@ -1,0 +1,8 @@
+fastmcp
+openai
+mcp
+fastapi
+uvicorn
+jinja2
+python-dotenv
+toml

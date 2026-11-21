@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Proposal — {{ client_name }} | Jonatech Digital</title>
+</head>
+<body style="margin:0;padding:0;font-family:'DM Sans',system-ui,sans-serif;background:#F7F4EF;color:#1A1A1A;">
+  <div style="width:794px;min-height:1123px;padding:48px;box-sizing:border-box;background:#F7F4EF;position:relative;font-family:'DM Sans',system-ui,sans-serif;color:#1A1A1A;">
+
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:36px;">
+      <img src="{{ logo_src }}" alt="Jonatech Digital" style="height:40px;width:auto;" />
+      <span style="font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:#5C6570;font-weight:600;">Proposal · {{ proposal_date }}</span>
+    </div>
+
+    <div style="height:4px;width:64px;background:#00C2A8;margin-bottom:20px;"></div>
+    <h1 style="font-family:Georgia,'Cormorant Garamond',serif;font-size:32px;font-weight:600;color:#0B1F3A;line-height:1.15;margin:0 0 8px 0;">{{ title }}</h1>
+    <p style="font-size:13px;color:#5C6570;margin:0 0 28px 0;">Prepared for <strong style="color:#1A1A1A;font-weight:500;">{{ client_name }}</strong> · {{ engagement_type }}</p>
+
+    <div style="margin-bottom:28px;">
+      <div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:#5C6570;font-weight:600;margin-bottom:12px;">Scope</div>
+      <ul style="list-style:none;padding:0;margin:0;">
+        {% for item in scope_items %}
+        <li style="position:relative;padding-left:18px;margin-bottom:8px;font-size:15px;line-height:1.45;">
+          <span style="position:absolute;left:0;top:0.55em;width:7px;height:7px;background:#00C2A8;display:inline-block;"></span>
+          {{ item }}
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+
+    <div style="background:#0B1F3A;color:#fff;padding:24px 28px;border-radius:4px;display:flex;justify-content:space-between;align-items:baseline;margin-bottom:28px;">
+      <span style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;opacity:0.75;">Investment</span>
+      <span style="font-family:Georgia,'Cormorant Garamond',serif;font-size:36px;color:#00C2A8;font-weight:600;">{{ price }}</span>
+    </div>
+
+    <div style="margin-bottom:28px;">
+      <div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:#5C6570;font-weight:600;margin-bottom:12px;">Terms</div>
+      {% for term in terms %}
+      <p style="font-size:14px;line-height:1.5;color:#1A1A1A;margin:0 0 6px 0;">{{ term }}</p>
+      {% endfor %}
+    </div>
+
+    <p style="font-size:14px;color:#0B1F3A;font-weight:500;margin:0 0 48px 0;">{{ next_step }}</p>
+
+    <div style="border-top:1px solid #D4CFC6;padding-top:16px;font-size:11px;color:#5C6570;letter-spacing:0.02em;">
+      {{ footer_line }}
+    </div>
+  </div>
+</body>
+</html>

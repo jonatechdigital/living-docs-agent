@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 48" role="img" aria-label="Jonatech Digital">
+  <rect width="48" height="48" rx="6" fill="#0B1F3A"/>
+  <path d="M12 34 V14 h6.5 l9 14.5 V14 H34 v20 h-6.5 L18.5 19.5 V34 Z" fill="#00C2A8"/>
+  <text x="64" y="32" font-family="DM Sans, Arial, sans-serif" font-size="22" font-weight="600" fill="#0B1F3A">Jonatech</text>
+  <text x="178" y="32" font-family="DM Sans, Arial, sans-serif" font-size="22" font-weight="400" fill="#5C6570">Digital</text>
+</svg>

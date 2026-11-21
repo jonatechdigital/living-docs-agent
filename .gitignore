@@ -1,0 +1,9 @@
+.env
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+.DS_Store
+docs/demo/last-screenshot.*
+docs/demo/p1-proposal-screenshot.txt
