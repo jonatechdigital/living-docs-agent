@@ -29,21 +29,23 @@ def fill_proposal() -> str:
     return Template(tpl_path.read_text(encoding="utf-8")).render(
         logo_src=logo_src,
         proposal_date=date.today().isoformat(),
-        title="Cursor Workshop Training",
-        client_name="Ronnie",
-        engagement_type="Half-day Cursor workshop facilitation",
+        title="Brand Document System",
+        client_name="Kampala Eye Hospital (KELH)",
+        engagement_type="Living document proposal system for eye-care packages",
         scope_items=[
-            "Live facilitation of Cursor workflows for AI builders",
-            "Hands-on agent / MCP productivity patterns",
-            "Q&A and team playbook handoff",
+            "Setup of branded living-document proposal system",
+            "Knowledge vault banking (notes + website → memory)",
+            "Multi-spread layout grammar on Paper canvas",
+            "Comment loop: edit layers, screenshot-verify, resolve",
         ],
-        price="$500",
+        price="$800",
         terms=[
-            "50% on acceptance; 50% on delivery.",
+            "50% deposit on acceptance; 50% on delivery.",
             "Scope locked to this proposal; changes re-quoted.",
+            "Payment via bank transfer or mobile money (UGX or USD).",
             "Valid 14 days from proposal date.",
         ],
-        next_step="Reply to accept and we lock the workshop date.",
+        next_step="Reply to accept and we initialize the KELH document vault today.",
         footer_line=(
             "Jonatech Digital · TIN 1018475623 · hello@jonatech.digital "
             "· +256 700 000 000 · Kampala"

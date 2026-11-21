@@ -1,5 +1,8 @@
 [model]
-provider = "xai"          # xai | openrouter
-name = "grok-4-fast"
+provider = "google"       # google | xai | openrouter
+name = "gemini-flash-latest"
+base_url_google = "https://generativelanguage.googleapis.com/v1beta/openai/"
 base_url_xai = "https://api.x.ai/v1"
 base_url_openrouter = "https://openrouter.ai/api/v1"
+# Google AI Studio key file (temporary hackathon wiring)
+key_file = "C:/Users/Jonatech Digital/Desktop/keys/GOOGLE-AI-COUNCIL-KEY.txt"

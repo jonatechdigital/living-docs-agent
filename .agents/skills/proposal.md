@@ -3,11 +3,12 @@
 ## Procedure
 1. Wake-up: `load_brain` → `load_knowledge` → `read_skill("proposal")` → `read_brand_style("jonatech-digital")` → `read_inspirations`.
 2. If brain is `⚠️ BRAIN NOT LOADED` — refuse to render.
-3. **STRUCTURE:** latest inspirations.md pattern if present; ELSE `read_template("proposal")` (fallback).
+3. **STRUCTURE:** latest inspirations.md pattern if present; ELSE `read_template("proposal")` (fallback). Prefer the vault template — it already has hero band, icon tiles, investment block, deliverable graphic.
 4. **BRAND:** always style.md + `jonatech-logo-original.png`. Never take colors/fonts/logo from inspo.
 5. **CONTENT:** request + banked knowledge. Ask only for missing fields (never invent).
-6. Write to Paper — new page, A4 artboard, screenshot self-check (logo, green/slate, TIN footer).
-7. Reply with short summary.
+6. Write to Paper — new page, A4 artboard. Do NOT emit a plain text-only page. Keep visual tiles / hero / accent graphics from the template.
+7. Screenshot self-check: logo, green/slate, graphic tiles present, TIN footer.
+8. Reply with short summary.
 
 ## Placeholders (fallback template)
 - `logo_src`, `proposal_date`, `title`, `client_name`, `engagement_type`

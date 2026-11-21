@@ -63,20 +63,63 @@ def load_config() -> dict:
     cfg_path = ROOT / "config.toml"
     if cfg_path.is_file():
         return toml.load(cfg_path)
-    return {"model": {"provider": "xai", "name": "grok-4-fast"}}
+    return {"model": {"provider": "google", "name": "gemini-flash-latest"}}
+
+
+def _read_key_file(path: str | Path) -> str:
+    p = Path(path)
+    if not p.is_file():
+        return ""
+    # Support raw key or KEY=value lines
+    for line in p.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" in line and not line.startswith("AIza") and not line.startswith("AQ."):
+            line = line.split("=", 1)[1].strip().strip('"').strip("'")
+        return line
+    return ""
+
+
+def _resolve_api_key(model_cfg: dict, env_names: list[str]) -> str:
+    for name in env_names:
+        val = os.environ.get(name, "").strip()
+        if val:
+            return val
+    key_file = model_cfg.get("key_file") or os.environ.get("GOOGLE_API_KEY_FILE", "")
+    if key_file:
+        return _read_key_file(key_file)
+    return ""
 
 
 def make_client(cfg: dict) -> tuple[OpenAI, str]:
     model_cfg = cfg.get("model", {})
-    provider = (model_cfg.get("provider") or "xai").lower()
-    name = model_cfg.get("name") or "grok-4-fast"
+    provider = (model_cfg.get("provider") or "google").lower()
+    name = model_cfg.get("name") or "gemini-flash-latest"
+
+    if provider in {"google", "gemini", "google-ai-studio"}:
+        key = _resolve_api_key(
+            model_cfg, ["GOOGLE_API_KEY", "GEMINI_API_KEY", "GOOGLE_AI_API_KEY"]
+        )
+        if not key:
+            raise RuntimeError(
+                "Google AI key missing. Set GOOGLE_API_KEY or key_file in config.toml"
+            )
+        base = (
+            model_cfg.get("base_url_google")
+            or "https://generativelanguage.googleapis.com/v1beta/openai/"
+        )
+        return OpenAI(api_key=key, base_url=base), name
+
     if provider == "openrouter":
-        key = os.environ.get("OPENROUTER_API_KEY", "")
+        key = _resolve_api_key(model_cfg, ["OPENROUTER_API_KEY"])
         if not key:
             raise RuntimeError("OPENROUTER_API_KEY missing in .env")
         base = model_cfg.get("base_url_openrouter") or "https://openrouter.ai/api/v1"
         return OpenAI(api_key=key, base_url=base), name
-    key = os.environ.get("XAI_API_KEY", "")
+
+    # xai (default fallback)
+    key = _resolve_api_key(model_cfg, ["XAI_API_KEY"])
     if not key:
         raise RuntimeError("XAI_API_KEY missing in .env")
     base = model_cfg.get("base_url_xai") or "https://api.x.ai/v1"
@@ -123,6 +166,32 @@ class DocsAgent:
     async def close(self) -> None:
         await self.hub.close()
 
+    def _assistant_tool_message(self, msg) -> dict:
+        """Preserve Gemini thought_signature / extra_content on tool_calls (required)."""
+        if hasattr(msg, "model_dump"):
+            dumped = msg.model_dump(exclude_none=True)
+            # Drop null noise; keep tool_calls exactly as returned
+            out = {"role": "assistant", "content": dumped.get("content") or ""}
+            if dumped.get("tool_calls"):
+                out["tool_calls"] = dumped["tool_calls"]
+            return out
+        # Fallback (non-pydantic)
+        return {
+            "role": "assistant",
+            "content": msg.content or "",
+            "tool_calls": [
+                {
+                    "id": tc.id,
+                    "type": "function",
+                    "function": {
+                        "name": tc.function.name,
+                        "arguments": tc.function.arguments or "{}",
+                    },
+                }
+                for tc in (msg.tool_calls or [])
+            ],
+        }
+
     async def chat(self, user_text: str) -> str:
         # Fast-path for comment moat without burning model rounds when asked explicitly
         low = user_text.strip().lower()
@@ -134,8 +203,57 @@ class DocsAgent:
             self.messages.append({"role": "assistant", "content": report})
             return report
 
+        # Fast-path: inspo upload — bank grammar without a full tool loop
+        if low.startswith("inspo:"):
+            path = user_text.split(":", 1)[1].strip()
+            if path.lower().endswith((".md", ".txt")):
+                reply = (
+                    f"That looks like notes ({path}), not a layout image. "
+                    "Paste the meeting notes as chat text instead of Upload inspiration."
+                )
+                self.messages.append({"role": "user", "content": user_text})
+                self.messages.append({"role": "assistant", "content": reply})
+                return reply
+            result = await self.hub.call("study_inspiration", {"path": path})
+            # If vision needs grammar, bank a brochure-safe default for demo
+            if '"need_user"' in result or '"ok": false' in result.lower():
+                result = await self.hub.call(
+                    "study_inspiration",
+                    {
+                        "path": path,
+                        "grammar_text": (
+                            "Brochure structure: sectioned spreads, airy whitespace, "
+                            "title + dominant visual above fold, services as tile grid, "
+                            "pricing as card row near end, footer/contact close. "
+                            "Use this STRUCTURE only — Jonatech brand colors/logo."
+                        ),
+                    },
+                )
+            reply = f"Inspiration banked (layout grammar only).\n{result[:1200]}"
+            self.messages.append({"role": "user", "content": user_text})
+            self.messages.append({"role": "assistant", "content": reply})
+            return reply
+
+        # Fast-path: bare URL → study website
+        if user_text.strip().startswith("http://") or user_text.strip().startswith(
+            "https://"
+        ):
+            result = await self.hub.call(
+                "study_client_website", {"url": user_text.strip()}
+            )
+            reply = f"Website studied / banked.\n{result[:1200]}"
+            self.messages.append({"role": "user", "content": user_text})
+            self.messages.append({"role": "assistant", "content": reply})
+            return reply
+
         self.messages.append({"role": "user", "content": user_text})
         tools = self.hub.openai_tools()
+        # Gemini OpenAI compat: strip unsupported JSON-schema keys that can 400
+        for t in tools:
+            params = t.get("function", {}).get("parameters") or {}
+            params.pop("$schema", None)
+            t["function"]["parameters"] = params
+
         for _ in range(MAX_TOOL_ROUNDS):
             kwargs: dict = {
                 "model": self.model,
@@ -148,6 +266,7 @@ class DocsAgent:
                 resp = self.client.chat.completions.create(**kwargs)
             except Exception as e:
                 err = f"Model call failed: {e}. Retry or check API key / network."
+                # Drop the failed user turn's broken history tail if prior tool sig missing
                 self.messages.append({"role": "assistant", "content": err})
                 return err
 
@@ -160,23 +279,7 @@ class DocsAgent:
                 self.messages.append({"role": "assistant", "content": text})
                 return text
 
-            self.messages.append(
-                {
-                    "role": "assistant",
-                    "content": msg.content or "",
-                    "tool_calls": [
-                        {
-                            "id": tc.id,
-                            "type": "function",
-                            "function": {
-                                "name": tc.function.name,
-                                "arguments": tc.function.arguments or "{}",
-                            },
-                        }
-                        for tc in tool_calls
-                    ],
-                }
-            )
+            self.messages.append(self._assistant_tool_message(msg))
 
             for tc in tool_calls:
                 name = tc.function.name
@@ -240,10 +343,13 @@ def main() -> None:
         asyncio.run(fix_main())
         return
     load_dotenv(ROOT / ".env")
-    if not os.environ.get("XAI_API_KEY") and not os.environ.get("OPENROUTER_API_KEY"):
+    cfg = load_config()
+    try:
+        make_client(cfg)
+    except RuntimeError as e:
         print(
-            "No XAI_API_KEY / OPENROUTER_API_KEY in .env.\n"
-            "Copy .env.example → .env and add a key, or run:\n"
+            f"{e}\n"
+            "Or run without a model:\n"
             "  python agent.py --smoke\n"
             "  python agent.py --fix-comments"
         )

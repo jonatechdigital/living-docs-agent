@@ -413,9 +413,10 @@ def study_client_website(url: str) -> str:
         if not u.startswith(("http://", "https://")):
             u = "https://" + u
 
-        # Guess client section from hostname
-        host = re.sub(r"^https?://", "", u).split("/")[0]
-        client_guess = host.split(".")[0].replace("-", " ").title()
+        # Guess client section from hostname (skip www)
+        host = re.sub(r"^https?://", "", u).split("/")[0].lower()
+        parts = [p for p in host.split(".") if p not in {"www", "com", "org", "net", "io", "co", "ug", "uk"}]
+        client_guess = " ".join(p.replace("-", " ").title() for p in parts[:3]) or host
 
         try:
             req = urllib.request.Request(
@@ -479,24 +480,54 @@ def study_inspiration(path: str, grammar_text: str = "") -> str:
 
         grammar = (grammar_text or "").strip() or None
         vision_error = None
-        # Optional Grok vision when XAI_API_KEY present
-        key = os.environ.get("XAI_API_KEY", "")
+
+        def _vision_key_and_client():
+            """Prefer Google AI Studio (config key_file), then XAI."""
+            import tomllib
+            from openai import OpenAI
+
+            key = (
+                os.environ.get("GOOGLE_API_KEY")
+                or os.environ.get("GEMINI_API_KEY")
+                or os.environ.get("XAI_API_KEY")
+                or ""
+            )
+            base = "https://generativelanguage.googleapis.com/v1beta/openai/"
+            model = os.environ.get("VISION_MODEL", "gemini-flash-latest")
+            cfg_path = ROOT / "config.toml"
+            if cfg_path.is_file():
+                with cfg_path.open("rb") as f:
+                    cfg = tomllib.load(f)
+                m = cfg.get("model", {})
+                kf = m.get("key_file") or os.environ.get("GOOGLE_API_KEY_FILE")
+                if kf and Path(kf).is_file() and not key:
+                    key = Path(kf).read_text(encoding="utf-8").strip().splitlines()[0].strip()
+                prov = (m.get("provider") or "google").lower()
+                if prov in {"google", "gemini", "google-ai-studio"}:
+                    base = m.get("base_url_google") or base
+                    model = m.get("name") or model
+                elif prov == "xai":
+                    base = m.get("base_url_xai") or "https://api.x.ai/v1"
+                    model = m.get("name") or "grok-4-fast"
+            if not key:
+                return None, None, None
+            return OpenAI(api_key=key, base_url=base), model, key[:4]
+
         if (
             not grammar
-            and key
             and p.is_file()
             and p.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp", ".gif"}
         ):
             try:
                 import base64
 
-                from openai import OpenAI
-
+                client, model, _ = _vision_key_and_client()
+                if client is None:
+                    raise RuntimeError("no vision API key")
                 b64 = base64.b64encode(p.read_bytes()).decode("ascii")
                 mime = "image/png" if p.suffix.lower() == ".png" else "image/jpeg"
-                client = OpenAI(api_key=key, base_url="https://api.x.ai/v1")
                 resp = client.chat.completions.create(
-                    model=os.environ.get("XAI_VISION_MODEL", "grok-4-fast"),
+                    model=model,
                     messages=[
                         {
                             "role": "user",
@@ -520,7 +551,6 @@ def study_inspiration(path: str, grammar_text: str = "") -> str:
                     ],
                 )
                 grammar = (resp.choices[0].message.content or "").strip()
-                # Strip any accidental brand mentions
                 for bad in ("#[0-9A-Fa-f]{3,8}", "font-family", "logo", "Helvetica", "Inter"):
                     grammar = re.sub(bad, "[redacted]", grammar, flags=re.I)
             except Exception as ve:
