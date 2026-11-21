@@ -1,8 +1,8 @@
-# Services and Pricing
+# Services and Pricing — Jonatech Digital
 
 | Service | Description | Standard rate |
 |---------|-------------|---------------|
-| Cursor workshop training | Half-day live facilitation for builders (Cursor + agent workflows) | **$500** |
+| Cursor / AI workshop training | Half-day live facilitation for builders | **$500** |
 | Agent build sprint | Scoped agent / MCP tooling (1–3 days) | $1,200 – $2,500 |
 | Brand document system | Docs agent + brand vault setup | $800 |
 | Custom software build | Quoted per brief | Custom |

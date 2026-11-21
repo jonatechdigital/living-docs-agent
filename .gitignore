@@ -7,3 +7,5 @@ venv/
 .DS_Store
 docs/demo/last-screenshot.*
 docs/demo/p1-proposal-screenshot.txt
+uploads/*
+!uploads/.gitkeep

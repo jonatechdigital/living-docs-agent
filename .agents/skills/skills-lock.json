@@ -1,8 +1,12 @@
 {
-  "version": "0.1.1",
+  "version": "0.2.1",
   "skills": {
     "proposal": {
       "file": "proposal.md",
+      "version": "0.2.0"
+    },
+    "inspirations": {
+      "file": "inspirations.md",
       "version": "0.1.1"
     }
   }

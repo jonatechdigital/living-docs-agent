@@ -1,184 +1,93 @@
-# PHASE SHIFT — 2026-11-20 — JONATECH DOCS AGENT v0.1 (PROPOSALS ONLY) — HACKATHON BUILD
+# PHASE SHIFT 2 — 2026-11-21 — INGEST PIPELINE + COLD-START BANKING + INSPO-DRIVEN RENDER
 
-**Date:** 2026-11-20
-**Driver:** Jonatech operational EXECUTE (verbatim): "OKAY PLEASE HANDOVER TO CURSOR , FOR TIME CONTRAIT LETS RESTRICT TO ONLY PROPOSALS"
-**Event:** AI builders hackathon, Kampala — welcome 14:00 EAT, Cursor workshop 14:30, ~6h build window, demo + pitch to judges. Prize: credits, top 3.
-**Theme:** Developer Productivity — "agents, extensions or workflows that help developers build faster."
+**Authorization:** Jonatech, verbatim: "EXECUTE PHASE SHIFT" (Buzz DM, 2026-11-20).
+**Status banner:** P1 CONSUMED (spine shipped — see docs/EXECUTION_LOG.md 2026-11-21). THIS is now the active work order. Old P1 order is superseded; do not re-execute it.
 
 ---
 
-# MISSION
+# MISSION DELTA (Jonatech's design, verbatim intent)
 
-Build **Jonatech Docs Agent** — a branded document agent for builders. It is a team member, not a chatbot:
+> **The agent is BORN knowing only its employer (Jonatech Digital). Everything else it banks live, through conversation.**
 
-- It has a **MEMORY** (brain: STATUS + DECISIONS) that survives session death.
-- It has **COMPANY KNOWLEDGE** (clients, services, terms) loaded at every wake-up.
-- It has a **SKILL LIBRARY** that grows — every human correction becomes a dated LESSONS entry in the proposal skill file.
-- It has a **BRAND VAULT** it defends — it never invents brand, it copies from the vault and places.
-- It renders onto **Paper (paper.design)** as editable HTML/CSS layers, where the human drops comments and the agent reads, fixes, and resolves them.
+The demo flow becomes:
 
-**SCOPE LOCK (Jonatech, 2026-11-20): ONE document type only — PROPOSALS.** No invoices, no quotes, no receipts, no receipts templates, no multi-type dispatch. One template: `proposal.html`. Cut scope, not corners.
+1. Jonatech pastes **meeting notes** from a client call
+2. Jonatech shares the **client's website link**
+3. Jonatech uploads an **inspiration file** (a proposal design he likes)
+4. The agent **banks all three** (clients file, client section, inspirations pattern) — asking only what's missing
+5. The agent **builds the proposal**: inspo's structure × Jonatech Digital's brand × meeting content → Paper canvas
 
-The pitch in one sentence: *"ChatGPT emits a corpse — this agent hands you a living document on a shared canvas, remembers your business, and gets better every time you correct it."*
-
----
-
-# TIME BUDGET — PHASES
-
-- **P1 (hrs 0–2): THE SPINE.** Vault server + brain + knowledge + proposal skill + Grok loop + Paper write → ONE branded Jonatech Digital proposal rendered on the Paper canvas. **Hard floor: P1 must be demoable by hr 2.**
-- **P2 (hrs 2–4): THE MOAT (PROTECTED).** Comment loop: read comments → edit layers → screenshot-verify → resolve → learn (DECISION + LESSONS). **If anything slips, it slips around P2, never P2.**
-- **P3 (hrs 4–6): THE FLOURISH.** Kill-and-revive rehearsal ×3, PDF export (print CSS), ui.py polish, optional `study_inspiration`. **Cut P3 first if time dies.**
-
-Do NOT gold-plate infra. No Docker, no auth, no tests beyond smoke checks, no config UI. `config.toml` + `.env` is enough.
+**Design rule change:** `templates/proposal.html` is DEMOTED to fallback. The latest `inspirations.md` pattern becomes the PRIMARY design source when present. The Jonatech Digital brand vault is SOVEREIGN at all times — inspiration sets structure; it may NEVER set colors, fonts, or logo.
 
 ---
 
-# ANATOMY — FILE TREE (create exactly this)
+# A. EMPLOYER PREFILL (do first, ~10 min)
+
+Jonatech supplies real facts (voice note or chat); Cursor transcribes:
+
+- `knowledge/1_Brand_DNA.md` → real Jonatech Digital identity, positioning, voice
+- `knowledge/3_Services_and_Pricing.md` → real services, standard rates, standard terms
+- `brand/jonatech-digital/style.md` → real footer facts (TIN, phone, email, bank) + real color/type rules
+- `brand/jonatech-digital/assets/` → REAL logo replaces the sample
+- `knowledge/2_Clients.md` → **RESET to an empty header** (cold start — the agent fills it live during the demo)
+- Remove the README "sample assets" disclaimer once real assets are in
+
+---
+
+# B. NEW VAULT TOOLS (vault_server.py)
 
 ```
-jonatech-docs-agent/
-├── .cursorrules            ← this work order (state, not history — mark CONSUMED when done)
-├── README.md               ← one screen: what it is, how to run, demo script
-├── requirements.txt        ← fastmcp, openai, mcp, fastapi, uvicorn, jinja2, python-dotenv
-├── config.toml             ← model name + provider toggle (xai | openrouter)
-├── .env.example           ← XAI_API_KEY, OPENROUTER_API_KEY (never commit real keys)
-├── agent.py                ← the loop: chat → Grok (function calling) → tool dispatch → reply
-├── ui.py                   ← 1-file FastAPI web chat (projector-friendly). Fallback: terminal chat in agent.py
-├── mcp_client.py           ← stdio MCP client for Paper's server (spawn `paper mcp`)
-├── vault_server.py         ← OUR FastMCP server: brain + knowledge + skills + vault
-├── brand/jonatech-digital/
-│   ├── style.md            ← document-family rules: colors, type scale, spacing, footer, voice
-│   ├── assets/             ← REAL Jonatech Digital logo(s) Jonatech drops in + favicon
-│   └── templates/proposal.html   ← Jinja2 skeleton: the ONE template
-├── knowledge/              ← numbered company files, loaded IN ORDER at wake-up
-│   ├── 1_Brand_DNA.md      ← who Jonatech Digital is, positioning, tone
-│   ├── 2_Clients.md        ← client list + per-client quirks (rates, terms, preferences)
-│   ├── 3_Services_and_Pricing.md ← service catalog + standard rates
-│   └── SOUL.md             ← agent persona: how it speaks, how it refuses, its name
-├── brain/CONTEXT.md        ← STATUS (rewritten in place) + DECISIONS (appended, dated)
-├── .agents/skills/
-│   ├── proposal.md         ← procedure + dated LESSONS section (grows itself)
-│   └── skills-lock.json    ← versioned skill registry
-└── docs/
-    ├── EXECUTION_LOG.md    ← dated decisions, one line each
-    └── demo/               ← demo script + screenshots
+append_knowledge(file: str, section: str, text: str) -> str
+    # Dated append into knowledge/<file> under "## <section>". File allow-list (1_,2_,3_,SOUL only).
+    # This is LIVE BANKING — the file grows through conversation.
+
+ingest_meeting_notes(notes: str) -> str
+    # Extract: client name, needs, scope, pricing discussed, follow-ups, dates.
+    # Banks via append_knowledge("2_Clients.md", <Client>, ...).
+    # Returns the list of MISSING fields so the agent asks the user — never invents them.
+
+study_client_website(url: str) -> str
+    # Fetch (10s timeout). Extract: what they do, products, tone.
+    # Banks under the client's section in 2_Clients.md.
+    # Graceful fail on network: bank a "website pending" note, tell the user, continue.
+
+study_inspiration(path: str) -> str
+    # Grok vision call on the image/PDF at path (uploads/ folder).
+    # Extract LAYOUT GRAMMAR ONLY: section order, hierarchy, grid, density.
+    # Append dated pattern note to .agents/skills/inspirations.md.
+    # HARD RULE: never extract/store/apply the inspo's colors, fonts, or logo.
+    # Fallback if vision fails: ask user to type 3 lines on what they like; write grammar from that.
 ```
 
 ---
 
-# THE VAULT SERVER (vault_server.py) — TOOL CONTRACT (FastMCP, stdio)
+# C. AGENT PROTOCOL v2 (agent.py system prompt)
 
-Implement EXACTLY these tools. Grok's function-calling surface = these + Paper's tools (discovered live).
-
-```
-load_brain() -> str
-    # Returns brain/CONTEXT.md verbatim. If the file is missing/corrupt,
-    # return "⚠️ BRAIN NOT LOADED" — the agent must REFUSE to render in that state.
-rewrite_status(section: str, new_text: str) -> str
-    # STATUS lines are rewritten IN PLACE, one true answer per fact. Never appended.
-append_decision(text: str) -> str
-    # Prepends "- YYYY-MM-DD: <text>" under "## DECISIONS". Immutable once written.
-load_knowledge() -> str
-    # Concatenates knowledge/ files in numeric order (1_, 2_, 3_, SOUL.md last).
-read_skill(doc_type: str) -> str   # doc_type="proposal" only in v0.1
-    # Returns .agents/skills/proposal.md, procedure + LESSONS.
-append_lesson(doc_type: str, lesson: str) -> str
-    # Appends "- [YYYY-MM-DD] <lesson>" under "## LESSONS" in the skill file.
-    # Bumps skills-lock.json version. Procedure knowledge ONLY — facts go to DECISIONS.
-read_brand_style(brand: str) -> str   # brand="jonatech-digital"
-    # Returns brand/jonatech-digital/style.md.
-read_template(doc_type: str) -> str
-    # Returns templates/proposal.html source. The ONLY render source. No freehand HTML.
-```
-
-All paths resolve relative to the project root. Validate every input (doc_type/brand must match allow-lists — proposal only, jonatech-digital only) and return clean errors, never exceptions.
+- Wake-up order: `load_brain` → `load_knowledge` → `read_skill("proposal")` → `read_brand_style` → read `inspirations.md` if present. Same ⚠️ BRAIN-NOT-LOADED refusal.
+- Render v2: **content** = request + banked knowledge + meeting notes. **STRUCTURE** = latest inspirations.md pattern if present, ELSE templates/proposal.html. **BRAND** = always style.md + assets.
+- Banking routing (enforce in system prompt, bank silently, mention in reply):
+  - client FACT → `append_knowledge`
+  - durable PREFERENCE → `append_decision`
+  - document PROCEDURE → `append_lesson`
+- `ui.py`: add a file-upload input → saves to `uploads/` → posts `inspo: uploads/<name>` into chat. Notes and URLs stay paste-text.
 
 ---
 
-# AGENT PROTOCOL (agent.py) — THE FOUR-CALL WAKE-UP
+# D. PRIORITY A — P2 COMMENT LOOP (verify BEFORE building B/C)
 
-System prompt for Grok (write it into agent.py as a constant):
-
-```
-You are Jonatech Docs Agent — a document team member for Jonatech Digital.
-Before ANY render you MUST, in order: (1) load_brain, (2) load_knowledge,
-(3) read_skill("proposal"), (4) read_brand_style("jonatech-digital").
-If load_brain returns "⚠️ BRAIN NOT LOADED" — announce it and REFUSE to render.
-You never invent brand: template comes from read_template, content comes from
-the user request + knowledge. Render onto the Paper drafts file, one page per
-proposal, then get_screenshot and self-check before replying.
-```
-
-**Render pipeline:** request → wake-up (4 loads) → `read_template("proposal")` → Grok fills Jinja2 placeholders using knowledge (client, service, rate) + request → write HTML layers to Paper via Paper MCP → `get_screenshot` → verify (logo present, colors match style.md, footer has TIN/contact) → reply with summary.
-
-**Fix loop (P2):** user says "fix my comments" → list comments on the page (Paper MCP) → for EACH: edit the layer(s) → `get_screenshot` verify → resolve the comment → report fixed items. **If a comment encodes a durable preference** (e.g. "always put the price last") → `append_decision` AND `append_lesson("proposal", ...)` BEFORE resolving. **Fact → DECISIONS, procedure → LESSONS.**
-
-**Model routing (config.toml):** default `grok-4-fast` via `https://api.x.ai/v1` (OpenAI-compatible, XAI_API_KEY — already in Jonatech's X Subscription shared pool). Fallback: any OpenRouter model via OPENROUTER_API_KEY. One config flip, zero code change.
+If the comment loop (read comments → edit layers → screenshot-verify → resolve → bank) is not yet end-to-end, **build it first. It is the demo moat.** Ingest tools build AROUND it, never instead of it.
 
 ---
 
-# PAPER INTEGRATION (mcp_client.py)
+# ACCEPTANCE (in order)
 
-- Paper Desktop must be RUNNING with the demo file open. Paper's MCP server: spawn `paper mcp` (stdio; the CLI installs at ~/.paper/bin/paper) — legacy HTTP endpoint 127.0.0.1:29979/mcp only works while a file is open. **There is NO hosted/remote Paper MCP — do not attempt tunneling.**
-- At build start: run `tools/list` on Paper's server and print the discovered surface. Read `get_guide(topic="paper-mcp-instructions")` ONCE per session (the docs prescribe this — follow it).
-- New proposals go on their own page in the drafts file. Exports land in Downloads/ — copy the paths from the tool response.
-- Free-plan MCP call limits are REAL. Rehearse early; if limits bite, upgrade to Paper Pro immediately (cheap insurance, Jonatech approves).
+- **AC1 (moat):** comment on canvas → "fix my comments" → fixed + resolved + verified; DECISIONS/LESSONS each gain a dated line.
+- **AC2:** paste meeting notes → 2_Clients.md gains a dated client section; agent asks only for missing fields.
+- **AC3:** upload inspo → inspirations.md gains a grammar note with ZERO inspo brand values; the next render follows it.
+- **AC4:** client URL → client section gains a business summary (or graceful "pending, no wifi" note).
+- **AC5 regression:** `python agent.py --smoke` still passes; kill-revive still works.
+- **Rehearse** the 5-beat script in `docs/demo/SCRIPT.md`: fresh brain → paste notes → URL → upload inspo → render → comment fix → KILL + relaunch → second proposal for the same client, ZERO questions asked.
 
----
+**Cut order if time dies:** AC4 website fetch → upload button (paste the file path instead). NEVER cut AC1, AC3, kill-revive.
 
-# MEMORY DISCIPLINE — brain/CONTEXT.md FORMAT
-
-```
-# Jonatech Docs Agent — Brain
-
-## STATUS   (one true answer per fact — REWRITE in place, never accumulate)
-- Active brand: jonatech-digital
-- Render target: Paper drafts file "Jonatech Digital — Documents"
-- Current model: grok-4-fast (xai)
-
-## DECISIONS (append-only, dated, immutable)
-- 2026-11-20: v0.1 scope locked to PROPOSALS ONLY (Jonatech, time constraint).
-- 2026-11-20: Demo brand = Jonatech Digital real assets.
-```
-
-STATUS = state (rewritten). DECISIONS = history (appended). **Never mix the two verbs.**
-
----
-
-# DEMO SCRIPT (docs/demo/ — rehearse ≥3 times, P3)
-
-**Rig:** laptop, Paper Desktop open (fresh account, file "Jonatech Digital — Documents"), ui.py chat LEFT half of screen, Paper canvas RIGHT half. Hotspot in the bag (model call needs internet; everything else is local).
-
-**Beat 1 — WORK (60s):** Type: *"Proposal for Ronnie — the Cursor workshop training gig, $500, our standard terms."* → branded proposal appears on canvas. Say: "On brand, first try. It knows my rates — nobody typed them."
-
-**Beat 2 — CO-BUILD (90s, THE MOAT):** Judge or Jonatech drops a comment: *"logo too small — and add your TIN."* → type: *"fix my comments"* → agent reads, edits layers, verifies by screenshot, resolves both. Say: "It reads the canvas, we edit together — and watch this next part."
-
-**Beat 3 — MEMORY (45s, THE KILL SHOT):** Kill the agent process. Relaunch. Type a NEW proposal request. The TIN rule from the dead session applies itself. Say: **"The chat died. The brain didn't."**
-
-*(Optional Beat 4 if clock allows: hand it a proposal layout screenshot — study_inspiration — "like this, but in MY brand.")*
-
-**Pitch close:** "Every builder here burns an evening formatting proposals. This hands the evening back. It's not generative AI — it's a colleague."
-
----
-
-# RISKS — PRE-REGISTERED
-
-| Risk | Mitigation |
-|---|---|
-| Paper free-tier MCP call limit | Rehearse early; upgrade Pro on bite |
-| Venue wifi dies | Hotspot; model call is the ONLY network dependency |
-| Grok tool-call flakes | ui.py shows raw retry; manual tool call fallback |
-| Paper MCP absent/closed | Announce once, render sandbox preview in ui.py instead |
-| Time death | Cut order: Beat 4 → inspiration tool → ui.py polish. NEVER cut Beats 1–3 |
-
----
-
-# ACCEPTANCE — DONE MEANS
-
-- P1: `python agent.py` → one branded proposal visible on Paper canvas, logo + style.md colors + footer present. ✋ STOP AND SHOW JONATECH.
-- P2: comment on canvas → "fix my comments" → both fixed, resolved, screenshot-verified; DECISIONS + LESSONS each have a dated new line.
-- P3: kill + relaunch → new proposal carries the learned rule. PDF export works. Rehearsal ×3 done.
-
-**Workflow per phase: build → smoke test → commit. One branch: `main`. Commit messages conventional (feat:/fix:).**
-
-When ALL of P1–P3 (or P1–P2 + P3 partial with cuts documented) are done: mark this file's banner **CONSUMED** with the date, log the completion line in docs/EXECUTION_LOG.md, and report back to Jonatech with the demo checklist status.
+When done: mark this file CONSUMED with date + completion line in docs/EXECUTION_LOG.md + report to Jonatech with AC checklist status.

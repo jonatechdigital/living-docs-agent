@@ -22,11 +22,10 @@ DEMO_FILE = "Jonatech Digital — Documents"
 
 def fill_proposal() -> str:
     tpl_path = ROOT / "brand" / "jonatech-digital" / "templates" / "proposal.html"
-    logo = ROOT / "brand" / "jonatech-digital" / "assets" / "logo.svg"
-    svg = logo.read_text(encoding="utf-8")
-    logo_src = "data:image/svg+xml;base64," + base64.b64encode(svg.encode("utf-8")).decode(
-        "ascii"
-    )
+    logo = ROOT / "brand" / "jonatech-digital" / "assets" / "jonatech-logo-original.png"
+    if not logo.is_file():
+        raise SystemExit(f"Real logo missing: {logo}")
+    logo_src = "data:image/png;base64," + base64.b64encode(logo.read_bytes()).decode("ascii")
     return Template(tpl_path.read_text(encoding="utf-8")).render(
         logo_src=logo_src,
         proposal_date=date.today().isoformat(),
@@ -115,14 +114,18 @@ async def run() -> None:
     hub = MCPHub()
     await hub.start()
     assert hub.vault_available, "vault failed"
+    print("wake: load_brain", flush=True)
     brain = await hub.call("load_brain", {})
     assert "STATUS" in brain, brain
+    print("wake: load_knowledge", flush=True)
     knowledge = await hub.call("load_knowledge", {})
     assert "Jonatech" in knowledge
+    print("wake: read_skill", flush=True)
     skill = await hub.call("read_skill", {"doc_type": "proposal"})
     assert "LESSONS" in skill
+    print("wake: read_brand_style", flush=True)
     style = await hub.call("read_brand_style", {"brand": "jonatech-digital"})
-    assert "#0B1F3A" in style
+    assert "#00AA3E" in style or "#1A2D2B" in style
 
     if not hub.paper_available:
         raise SystemExit("Paper MCP not available")
@@ -209,7 +212,7 @@ async def run() -> None:
         raise SystemExit(f"screenshot failed:\n{shot}")
 
     assert "TIN 1018475623" in html
-    assert "#0B1F3A" in html
+    assert "#00AA3E" in html or "#1A2D2B" in html
 
     finish = await hub.call("paper_finish_working_on_nodes", {"fileId": file_id})
     print("finish:", finish[:200])

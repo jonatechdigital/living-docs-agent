@@ -1,4 +1,4 @@
-"""Jonatech Docs Agent — chat → Grok (function calling) → vault + Paper tools → reply."""
+"""Living Docs Agent — chat → Grok (function calling) → vault + Paper tools → reply."""
 
 from __future__ import annotations
 
@@ -14,35 +14,49 @@ from openai import OpenAI
 
 from mcp_client import MCPHub, ROOT
 
-SYSTEM_PROMPT = """You are Jonatech Docs Agent — a document team member for Jonatech Digital.
-Before ANY render you MUST, in order: (1) load_brain, (2) load_knowledge,
-(3) read_skill("proposal"), (4) read_brand_style("jonatech-digital").
+SYSTEM_PROMPT = """You are Living Docs Agent — a document team member employed by Jonatech Digital.
+You are BORN knowing only your employer (Jonatech Digital brand vault + services).
+Everything else (clients, meeting facts, inspiration grammar) you BANK live through conversation.
+
+## Wake-up (before ANY render)
+In order: (1) load_brain, (2) load_knowledge, (3) read_skill("proposal"),
+(4) read_brand_style("jonatech-digital"), (5) read_inspirations.
 If load_brain returns "⚠️ BRAIN NOT LOADED" — announce it and REFUSE to render.
-You never invent brand: template comes from read_template, content comes from
-the user request + knowledge. Render onto the Paper drafts file, one page per
-proposal, then get_screenshot and self-check before replying.
 
-Paper tools are exposed with a paper_ prefix (e.g. paper_write_html, paper_get_screenshot,
-paper_create_page, paper_create_artboard, paper_get_guide, paper_finish_working_on_nodes,
-paper_list_resources, paper_open_file). Follow the paper-mcp-instructions guide already
-loaded this session. After writing, always call paper_finish_working_on_nodes.
-Target file name: "Jonatech Digital — Documents" (create via paper_create_file if missing).
-One proposal = one new page + A4 artboard (794x1123), then write_html into the artboard.
-ALWAYS pass fileId on Paper mutating tools (create_page, create_artboard, write_html,
-get_screenshot, finish_working_on_nodes).
+## Render v2
+- CONTENT = user request + banked knowledge + meeting notes.
+- STRUCTURE = latest inspirations.md pattern if present; ELSE templates/proposal.html via read_template.
+- BRAND = ALWAYS style.md + brand assets. Inspiration NEVER sets colors, fonts, or logo.
+Logo file (light paper): brand/jonatech-digital/assets/jonatech-logo-original.png
+Embed as data URI or path Paper accepts. Footer MUST include TIN + contact from style.md.
 
-Scope lock: PROPOSALS ONLY. One template via read_template("proposal").
-Logo path for embeds: use the absolute path under brand/jonatech-digital/assets/logo.svg
-(or a file:// URL / paper-compatible image reference as the Paper guide specifies).
-Footer must include TIN and contact from knowledge.
+## Banking (silent bank, mention briefly in reply)
+- client FACT → append_knowledge / ingest_meeting_notes / study_client_website
+- durable PREFERENCE → append_decision
+- document PROCEDURE → append_lesson("proposal", ...)
+- inspiration layout → study_inspiration(path)  [grammar only]
 
-When the user says "fix my comments": list comment threads, for each edit layers,
-screenshot-verify, then resolve. Durable preferences → append_decision (facts) and
-append_lesson("proposal", ...) (procedure) BEFORE resolving.
+When user pastes meeting notes → ingest_meeting_notes; ask ONLY for fields in "missing".
+When user shares a URL → study_client_website.
+When user says inspo: uploads/<name> or gives a path → study_inspiration.
+Never invent missing client facts.
 
-Be concise. Report what you rendered and the self-check result."""
+## Paper
+Tools use paper_ prefix. ALWAYS pass fileId on mutating tools.
+Target file: "Jonatech Digital — Documents" (create if missing).
+One proposal = new page + A4 artboard (794x1123) → write_html → get_screenshot → finish_working_on_nodes.
 
-MAX_TOOL_ROUNDS = 24
+## Fix my comments (THE MOAT)
+1. paper_list_comment_threads (status=open) on the file
+2. For EACH: paper_get_comment_thread → edit layers (update_styles / set_text_content / write_html)
+3. paper_get_screenshot verify
+4. If durable preference: append_decision AND/OR append_lesson BEFORE resolve
+5. paper_set_comment_thread_status → resolved
+6. Report what you fixed
+
+Scope: PROPOSALS ONLY. Be concise."""
+
+MAX_TOOL_ROUNDS = 28
 
 
 def load_config() -> dict:
@@ -82,10 +96,15 @@ class DocsAgent:
     async def start(self) -> None:
         await self.hub.start()
         sys_content = SYSTEM_PROMPT
-        logo = ROOT / "brand" / "jonatech-digital" / "assets" / "logo.svg"
+        logo = (
+            ROOT
+            / "brand"
+            / "jonatech-digital"
+            / "assets"
+            / "jonatech-logo-original.png"
+        )
         sys_content += f"\n\nAbsolute logo path: {logo.as_posix()}"
         if self.hub.paper_guide:
-            # Cap guide size so context stays usable
             guide = self.hub.paper_guide
             if len(guide) > 12000:
                 guide = guide[:12000] + "\n…[guide truncated for context]"
@@ -95,9 +114,8 @@ class DocsAgent:
             self._guide_injected = True
         if not self.hub.paper_available and not self._paper_announced:
             sys_content += (
-                "\n\nNOTE: Paper MCP is NOT connected. Announce this once to the user. "
-                "Do not invent Paper writes. Offer a sandbox HTML preview summary instead "
-                "(fill template via vault tools, describe what would render)."
+                "\n\nNOTE: Paper MCP is NOT connected. Announce this once. "
+                "Do not invent Paper writes; offer sandbox preview via vault template fill."
             )
             self._paper_announced = True
         self.messages = [{"role": "system", "content": sys_content}]
@@ -106,6 +124,16 @@ class DocsAgent:
         await self.hub.close()
 
     async def chat(self, user_text: str) -> str:
+        # Fast-path for comment moat without burning model rounds when asked explicitly
+        low = user_text.strip().lower()
+        if low in {"fix my comments", "fix comments", "resolve comments"}:
+            from comment_loop import fix_open_comments
+
+            report = await fix_open_comments(self.hub)
+            self.messages.append({"role": "user", "content": user_text})
+            self.messages.append({"role": "assistant", "content": report})
+            return report
+
         self.messages.append({"role": "user", "content": user_text})
         tools = self.hub.openai_tools()
         for _ in range(MAX_TOOL_ROUNDS):
@@ -132,7 +160,6 @@ class DocsAgent:
                 self.messages.append({"role": "assistant", "content": text})
                 return text
 
-            # Persist assistant tool-call turn
             self.messages.append(
                 {
                     "role": "assistant",
@@ -154,9 +181,10 @@ class DocsAgent:
             for tc in tool_calls:
                 name = tc.function.name
                 args_raw = tc.function.arguments or "{}"
-                print(f"  → tool {name}({args_raw[:120]}{'…' if len(args_raw) > 120 else ''})")
+                print(
+                    f"  → tool {name}({args_raw[:120]}{'…' if len(args_raw) > 120 else ''})"
+                )
                 result = await self.hub.call(name, args_raw)
-                # Truncate huge screenshot payloads for chat history
                 stored = result
                 if len(stored) > 8000 and "[image:" in stored:
                     stored = stored[:500] + "\n…[screenshot truncated in history]"
@@ -176,11 +204,14 @@ class DocsAgent:
 
 
 async def terminal_loop() -> None:
-    print("Jonatech Docs Agent — terminal chat. Ctrl+C or 'quit' to exit.\n")
+    print("Living Docs Agent — terminal chat. Ctrl+C or 'quit' to exit.\n")
     agent = DocsAgent()
     try:
         await agent.start()
-        print(f"Model: {agent.model} | vault={agent.hub.vault_available} | paper={agent.hub.paper_available}\n")
+        print(
+            f"Model: {agent.model} | vault={agent.hub.vault_available} | "
+            f"paper={agent.hub.paper_available}\n"
+        )
         while True:
             try:
                 line = input("you> ").strip()
@@ -203,11 +234,18 @@ def main() -> None:
 
         asyncio.run(smoke_run())
         return
+    if len(sys.argv) > 1 and sys.argv[1] in {"--fix-comments", "fix-comments"}:
+        from comment_loop import main as fix_main
+
+        asyncio.run(fix_main())
+        return
     load_dotenv(ROOT / ".env")
     if not os.environ.get("XAI_API_KEY") and not os.environ.get("OPENROUTER_API_KEY"):
         print(
             "No XAI_API_KEY / OPENROUTER_API_KEY in .env.\n"
-            "Copy .env.example → .env and add a key, or run: python agent.py --smoke"
+            "Copy .env.example → .env and add a key, or run:\n"
+            "  python agent.py --smoke\n"
+            "  python agent.py --fix-comments"
         )
         sys.exit(2)
     asyncio.run(terminal_loop())
